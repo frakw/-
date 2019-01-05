@@ -53,13 +53,13 @@ const char* ssid = "Tenda_101668";//wifi name
 const char* password = "24795612";//wifi password
 WiFiServer server(80);
 //-------------------------------api設定------------------------------------------------------
-String apiKey = "8VV1UTTXX95DJXWO"; //thingspeak apikey
+String apiKey = ""; //thingspeak apikey
 const char* server1 = "api.thingspeak.com";//thingspeak 網址
 
-#define FIREBASE_HOST "frakw-9453.firebaseio.com"//firebase專案網址
-#define FIREBASE_AUTH "gMAQxKqpFePIebpSOAmooEUFLSwxSXR4DA1KsBZR"//firebase資料庫密鑰
+#define FIREBASE_HOST ""//firebase專案網址
+#define FIREBASE_AUTH ""//firebase資料庫密鑰
 const char *host = "maker.ifttt.com";
-const char *privateKey = "dYor6dge2URRU69BcRTcoU";//ifttt api
+const char *privateKey = "";//ifttt api
 
 void setup() {
 //-----------------------------PM2.5感測模組設定-----------------------------------------------  
