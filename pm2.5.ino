@@ -31,14 +31,14 @@ PMS::DATA data;//pm2.5感測模組PMS3003
 RGBLed led(D6, D7, D8, COMMON_CATHODE);//RGB LED腳位(紅,綠,藍,共陰or陽)
 //------------------------------變數宣告------------------------------------------------------
 boolean a;//手機開關資料
-boolean c;//control 選擇溫控OR手動  預設為自動 c=0--自動  c=1--手動 
+boolean c;//control 選擇溫控OR手動模式  預設為自動 c=0--自動  c=1--手動 
 boolean t;//PM2.5是否大於開啟值 是---1  否----0
 int pm25max; //風扇開啟值
 int humidity;//濕度
 int pm25;//pm2.5值
 int temperature ;//溫度
-int b;//指撥開關1 
-int d;//指撥開關2
+int b;//指撥開關1(盒子上為3號) 
+int d;//指撥開關2 on---顯示ip  off---LCD一般模式
 int y;//有無wifi連接
 int befored;//上一個迴圈指撥開關2的狀態
 int beforet;//上一個迴圈的溫度值
@@ -53,13 +53,13 @@ const char* ssid = "Tenda_101668";//wifi name
 const char* password = "24795612";//wifi password
 WiFiServer server(80);
 //-------------------------------api設定------------------------------------------------------
-String apiKey = ""; //thingspeak apikey
+String apiKey = "8VV1UTTXX95DJXWO"; //thingspeak apikey
 const char* server1 = "api.thingspeak.com";//thingspeak 網址
 
-#define FIREBASE_HOST ""//firebase專案網址
-#define FIREBASE_AUTH ""//firebase資料庫密鑰
+#define FIREBASE_HOST "frakw-9453.firebaseio.com"//firebase專案網址
+#define FIREBASE_AUTH "gMAQxKqpFePIebpSOAmooEUFLSwxSXR4DA1KsBZR"//firebase資料庫密鑰
 const char *host = "maker.ifttt.com";
-const char *privateKey = "";//ifttt api
+const char *privateKey = "dYor6dge2URRU69BcRTcoU";//ifttt webhook api
 
 void setup() {
 //-----------------------------PM2.5感測模組設定-----------------------------------------------  
@@ -74,8 +74,8 @@ void setup() {
   dht.setup(D3);//dht11資料接到D3  
   pinMode(fanPin, OUTPUT);//風扇控制腳
   pinMode(D3, INPUT);//dht 資料輸入腳
-  pinMode(D0,INPUT); //按鈕輸入腳
-  pinMode(D1,INPUT); //按鈕輸入腳
+  pinMode(D0,INPUT); //指撥開關1輸入腳
+  pinMode(D1,INPUT); //指撥開關2按鈕輸入腳
 //-----------------------------串列阜初始化--------------------------------------------------------   
   Serial.begin(9600);  
   Serial.println();
@@ -86,17 +86,17 @@ void setup() {
  digitalWrite(fanPin, LOW);//預設風扇初始值為關  
  a=0; //風扇預設停轉
  c=0;//control預設為自動 c=0--自動  c=1--手動 
- pm25max = 54; //PM2.5預設警戒值 超過將開啟風扇
- iftttmax= 54;
+ pm25max = 54; //PM2.5預設開啟風扇值 超過將開啟風扇
+ iftttmax= 54; //ifttt預設提醒值 超過將傳LINE提醒
 //-----------------------------WIFI初始化--------------------------------------------------------   
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED)//暫停直到連接WIFI 
   { 
     getvalue();
     nowifistate();//無wifi時進入auto模式
-    nowifilcd();
+    nowifilcd();//無wifi LCD顯示no wifi connect
     RGB();
-    delay(10); 
+    delay(10);//不要跑太快 會當機 
   }
   lcd.clear();
   Serial.println("");
@@ -113,7 +113,7 @@ void setup() {
   lcd.setCursor(0,1);
   lcd.print(WiFi.localIP());//開機顯示區域網IP
   delay(5000);
-  lcd.clear();
+  lcd.clear();//清除LCD 避免殘留的字
 //-----------------------------其他----------------------------------------------  
 
 Firebase.begin(FIREBASE_HOST, FIREBASE_AUTH); //firebse帳戶連接
@@ -121,13 +121,14 @@ Firebase.begin(FIREBASE_HOST, FIREBASE_AUTH); //firebse帳戶連接
 //-----------------------------主程式-------------------------------------------
 void loop() {
  
-  WiFiClient client = server.available();
+  WiFiClient client = server.available();//網路伺服器(區域網使用)
   y=0;
   getvalue();
   RGB();
   
 //-----------------------------如果無WIFI連接--------------------------------
-  while (WiFi.status() != WL_CONNECTED) { //如果中途WIFI斷線 讓感測器繼續運作  直到連接WIFI
+  while (WiFi.status() != WL_CONNECTED) { //如果中途WIFI斷線 讓感測器 LCD RGB繼續運作  直到連接WIFI
+    getvalue();
     nowifistate();//無wifi時進入auto模式
     nowifilcd();
     RGB();
@@ -138,7 +139,7 @@ void loop() {
 //-----------------------------無線控制模式---------------------------------  
   b=digitalRead(D0);//指撥開關1
   d=digitalRead(D1);//指撥開關2
-  if(d!=befored||y==1)//如果中途指撥2改變或wifi斷線(已連回)則清除lcd
+  if(d!=befored||y==1)//如果中途指撥開關2改變或wifi斷線(已連回)因為變更LCD模式 所以要清除lcd 
   {
    lcd.clear();  
   }
@@ -151,7 +152,7 @@ void loop() {
   delay(5000);
   lcd.clear(); 
   }
-  befored=d;
+  befored=d;//把這次迴圈指撥開關2的狀態存入befored 以供下一次迴圈使用
   state();//輸出最終風扇狀態 
 //-----------------------------指撥開關2 ON 進入ip模式 OFF 一般模式-----------
   if(d==1)
@@ -166,15 +167,15 @@ void loop() {
 
    if(b==0){ //全球網連線(指撥開關1 OFF)
     
-//----------------------------firebase接收資料-----------------------------
+//----------------------------接收firebase資料-----------------------------
        
-    a=Firebase.getString("a").toInt(); //取得資料庫回傳值
+    a=Firebase.getString("a").toInt(); //取得資料庫標籤"a"回傳值 從字串轉整數
     c=Firebase.getString("c").toInt();
     pm25max=Firebase.getString("maxpm25").toInt();
     iftttmax=Firebase.getString("iftttmax").toInt(); 
-   Serial.println(a);
-   Serial.println(c); 
-   Serial.println(pm25max);
+    Serial.println(a);
+    Serial.println(c); 
+    Serial.println(pm25max);
    
 //----------------------------firebase上傳資料----------------------------- 
        
@@ -184,10 +185,10 @@ void loop() {
     
 //----------------------------thingspeak上傳資料------------------------------------
 
-           if (client.connect(server1,80))   //  發送資料到thingspeak 
+           if (client.connect(server1,80))
                      {  
                             
-                           String postStr = "/update?api_key=";//資料庫
+                           String postStr = "/update?api_key=";//製作GET網址
                              postStr+=apiKey;
                              postStr +="&field1=";
                              postStr += temperature;
@@ -212,12 +213,12 @@ void loop() {
    
 else{
   
- WiFiClient client = server.available(); //啟動WIFI client 
+ WiFiClient client = server.available(); //網路伺服器
    if(!client)//手機控制清淨機開關
      {
       return;
      }
-  String request = client.readStringUntil('\r');//取得get資料
+  String request = client.readStringUntil('\r');//取得get網址資料
   Serial.println(request);
   
 //--------------------------html網頁----------------------------------- 
@@ -234,7 +235,7 @@ else{
   client.println("<a href=\"/FAN=auto\"\"><button style='FONT-SIZE: 13px; HEIGHT: 50px;WIDTH: 75px; 32px; Z-INDEX: 0; TOP: 50px;'>AUTO </button></a><br />");
   client.println("PM2.5:");
   client.println(pm25);
-  client.println("<br/>");
+  client.println("<br/>");//換行
   client.println("temperature:");
   client.println(temperature);
   client.println("<br/>");
@@ -247,20 +248,20 @@ else{
 //---------------------------------區網判斷風扇開關----------------------------------- 
   
   if(request.indexOf("/FAN=ON") !=-1){//強制開
-  a=1;//風扇on or off
-  c=1;//手動1 溫控0
+    a=1;//風扇on or off
+    c=1;//手動1 自動0
   
-  client.println("ON");
+    client.println("ON");
   }
    else if(request.indexOf("/FAN=OFF") !=-1)  {//強制關
     a=0;
     c=1;
     client.println("OFF");  
   }
- else if(request.indexOf("/FAN=auto") !=-1)  {//溫控
+ else if(request.indexOf("/FAN=auto") !=-1)  {//自動模式
     
-  c=0;
-  client.println("auto");  
+    c=0;
+    client.println("auto");  
   }
    client.println("</html>");
    Serial.print("a:");
@@ -296,7 +297,7 @@ void state(){
   }
   if(pm25>=iftttmax)
   {
-  ifttt(event);//發給ifttt在傳到LINE上   
+  ifttt(event);//發給ifttt在傳到LINE   
   }
   if(c==1)
   {   
@@ -318,7 +319,7 @@ void nowifistate()
    digitalWrite(fanPin,0);
   }
 }
-//-------------------------------LCD畫面&RGB(LCD一般模式)-----------------------------
+//-------------------------------LCD畫面(LCD一般模式)-----------------------------
 
 void mylcd(){
   
@@ -351,7 +352,7 @@ void mylcd(){
     lcd.print("fan OFF");    
     } 
 }
-//-------------------------------無連接WIFI時的LCD畫面-----------------------------
+//-------------------------------無連接WIFI時的LCD畫面(LCD無wifi模式)-----------------------------
 
 void nowifilcd()
 {         
@@ -421,7 +422,7 @@ void RGB(){
      led.setColor(255, 0, 255); 
     }
 }
-//-------------------------------ifttt get webhook網址觸發-----------------------------
+//-------------------------------get webhook網址觸發ifttt-----------------------------
 void ifttt(char* x){
   WiFiClient client;
   const int httpPort = 80;
@@ -429,7 +430,7 @@ void ifttt(char* x){
     Serial.println("connection failed");
     return;
   }
-  String url = "/trigger/";//製作GET網紙
+  String url = "/trigger/";//製作GET網址
   url += x;
   url += "/with/key/";
   url += privateKey;
@@ -450,7 +451,7 @@ void ifttt(char* x){
                "Host: " + host + "\r\n" + 
                "Connection: close\r\n\r\n");
 }
-//-----------------------------------LCD顯示ip模式---------------------------------
+//-----------------------------------LCD顯示ip模式(LCD ip模式)---------------------------------
 void iplcd()
 {
     lcd.setCursor(0,0);
